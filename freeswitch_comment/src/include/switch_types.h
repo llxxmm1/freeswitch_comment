@@ -651,8 +651,8 @@ typedef struct {
 	double std_deviation;
 
 	/* Burst and Packet Loss */
-	double lossrate;
-	double burstrate;
+	double lossrate;                    /* 丢包率 */
+	double burstrate;                   /* 突发带宽 */
 	double mean_interval;
 	int loss[LOST_BURST_CAPTURE];
 	int last_loss;
@@ -660,8 +660,8 @@ typedef struct {
 	int last_processed_seq;
 	switch_size_t flaws;
 	switch_size_t last_flaw;
-	double R;
-	double mos;
+	double R;                           /* 系数 */
+	double mos;                         /* mos值 */
 	struct error_period *error_log;
 } switch_rtp_numbers_t;
 
@@ -691,9 +691,9 @@ typedef struct {
 } switch_rtcp_numbers_t;
 
 typedef struct {
-	switch_rtp_numbers_t inbound;
-	switch_rtp_numbers_t outbound;
-	switch_rtcp_numbers_t rtcp;
+	switch_rtp_numbers_t inbound;               /* 呼入方向数据统计 */
+	switch_rtp_numbers_t outbound;              /* 呼出方向数据统计 */
+	switch_rtcp_numbers_t rtcp;                 /* rtcp相关的数据统计 */
 	uint32_t read_count;
 } switch_rtp_stats_t;
 
@@ -729,7 +729,7 @@ typedef enum {
 	SWITCH_RTP_FLAG_DTMF_ON,
 	SWITCH_RTP_FLAG_IO,
 	SWITCH_RTP_FLAG_USE_TIMER,
-	SWITCH_RTP_FLAG_RTCP_PASSTHRU,
+	SWITCH_RTP_FLAG_RTCP_PASSTHRU,          /* rtcp透传，即不对rtcp报文做处理 */
 	SWITCH_RTP_FLAG_SECURE_SEND,
 	SWITCH_RTP_FLAG_SECURE_RECV,
 	SWITCH_RTP_FLAG_AUTOADJ,
@@ -759,8 +759,8 @@ typedef enum {
 	SWITCH_RTP_FLAG_ESTIMATORS,
 	SWITCH_RTP_FLAG_ADJ_BITRATE_CAP,
 	SWITCH_RTP_FLAG_VIDEO,
-	SWITCH_RTP_FLAG_ENABLE_RTCP,
-	SWITCH_RTP_FLAG_RTCP_MUX,
+	SWITCH_RTP_FLAG_ENABLE_RTCP,            /* 是否开启rtcp功能 */
+	SWITCH_RTP_FLAG_RTCP_MUX,               /* 是否开启rtcp端口复用 */
 	SWITCH_RTP_FLAG_KILL_JB,
 	SWITCH_RTP_FLAG_VIDEO_BREAK,
 	SWITCH_RTP_FLAG_PAUSE,

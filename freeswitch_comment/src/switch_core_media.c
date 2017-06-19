@@ -114,9 +114,9 @@ typedef struct switch_rtp_engine_s {
 	uint8_t codec_reinvites;
 	uint32_t max_missed_packets;
 	uint32_t max_missed_hold_packets;
-	uint32_t ssrc;
-	uint32_t remote_ssrc;
-	switch_port_t remote_rtcp_port;
+	uint32_t ssrc;                                  /* 本端ssrc */
+	uint32_t remote_ssrc;                           /* 对端ssrc */
+	switch_port_t remote_rtcp_port;                 /* 对端rtcp端口 */
 	switch_rtp_bug_flag_t rtp_bugs;
 
 
@@ -1581,6 +1581,15 @@ SWITCH_DECLARE(void) switch_core_media_set_stats(switch_core_session_t *session)
 }
 
 
+/**
+ * switch_media_handle_destroy - 释放媒体句柄
+ *
+ * @session: 会话管理结构
+ *
+ * 析构的媒体句柄，包含音视频rtp引擎的读写编解码信息、视频时间管理句柄、解激活rtp会话
+ *
+ * 返回值: 无
+ */
 
 SWITCH_DECLARE(void) switch_media_handle_destroy(switch_core_session_t *session)
 {
@@ -1616,13 +1625,12 @@ SWITCH_DECLARE(void) switch_media_handle_destroy(switch_core_session_t *session)
 	if (switch_core_codec_ready(&v_engine->write_codec)) {
 		switch_core_codec_destroy(&v_engine->write_codec);
 	}
-
+    
 	switch_core_session_unset_read_codec(session);
 	switch_core_session_unset_write_codec(session);
+
+    /* 解激活rtp会话 */
 	switch_core_media_deactivate_rtp(session);
-
-
-
 }
 
 
@@ -3700,7 +3708,17 @@ static void clear_pmaps(switch_rtp_engine_t *engine)
 	}
 }
 
-//?
+/**
+ * switch_core_media_negotiate_sdp - sdp协商
+ *  
+ * @session:  fs 会话管理结构
+ * @r_sdp: 
+ * @proceed: 
+ * @sdp_type: sdp的协商类型(request,response)
+ *
+ * 返回值: 
+ */
+
 SWITCH_DECLARE(uint8_t) switch_core_media_negotiate_sdp(switch_core_session_t *session, const char *r_sdp, uint8_t *proceed, switch_sdp_type_t sdp_type)
 {
 	uint8_t match = 0;
@@ -11224,6 +11242,7 @@ SWITCH_DECLARE(switch_timer_t *) switch_core_media_get_timer(switch_core_session
 
 }
 
+/* 请求发送fir或者pli */
 SWITCH_DECLARE(switch_status_t) switch_core_session_request_video_refresh(switch_core_session_t *session)
 {
 	switch_channel_t *channel = switch_core_session_get_channel(session);

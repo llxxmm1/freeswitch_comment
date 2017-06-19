@@ -331,7 +331,7 @@ struct switch_rtp {
 
 	ts_normalize_t ts_norm;
 	switch_sockaddr_t *remote_addr, *rtcp_remote_addr;
-	rtp_msg_t recv_msg;
+	rtp_msg_t recv_msg;                                 /* socket独处的rtp报文 */
 	rtcp_msg_t rtcp_recv_msg;
 	rtcp_msg_t *rtcp_recv_msg_p;
 
@@ -380,7 +380,7 @@ struct switch_rtp {
 	uint32_t max_next_write_samplecount;
 	uint32_t queue_delay;
 	switch_time_t last_write_timestamp;
-	uint32_t flags[SWITCH_RTP_FLAG_INVALID];
+	uint32_t flags[SWITCH_RTP_FLAG_INVALID];                        /* 功能开关标志位列表 */
 	switch_memory_pool_t *pool;
 	switch_sockaddr_t *from_addr, *rtp_from_addr, *rtcp_from_addr;
 	char *rx_host;
@@ -436,7 +436,7 @@ struct switch_rtp {
 	int from_auto;
 	uint32_t cng_count;
 	switch_rtp_bug_flag_t rtp_bugs;
-	switch_rtp_stats_t stats;
+	switch_rtp_stats_t stats;                                   /* 统计 */
 	uint32_t clean_stream;
 	uint32_t bad_stream;
 	uint32_t recovering_stream;
@@ -456,14 +456,14 @@ struct switch_rtp {
 	switch_size_t last_flush_packet_count;
 	uint32_t interdigit_delay;
 	switch_core_session_t *session;
-	payload_map_t **pmaps;
+	payload_map_t **pmaps;                                      /* 负载信息表 */
 	payload_map_t *pmap_tail;
-	kalman_estimator_t *estimators[KALMAN_SYSTEM_MODELS];
+	kalman_estimator_t *estimators[KALMAN_SYSTEM_MODELS];       /* 卡尔曼估值器 */
 	cusum_kalman_detector_t *detectors[KALMAN_SYSTEM_MODELS];
 	int ice_adj;
-	uint8_t has_rtp;
-	uint8_t has_rtcp;
-	uint8_t has_ice;
+	uint8_t has_rtp;                                            /* 标记收到的报文是rtp */
+	uint8_t has_rtcp;                                           /* 标记收到的报文是rtcp */
+	uint8_t has_ice;                                            /* 标记收到的报文是ice */
 	uint8_t punts;
 	uint8_t clean;
 	uint32_t last_max_vb_frames;
@@ -496,6 +496,7 @@ struct switch_rtcp_sr_head {
 	uint32_t oc;
 };
 
+/* sr相对于rr独有的信息 */
 struct switch_rtcp_sender_info {
 	uint32_t ntp_msw;
 	uint32_t ntp_lsw;
@@ -504,12 +505,14 @@ struct switch_rtcp_sender_info {
 	uint32_t oc;
 };
 
+/* sr */
 struct switch_rtcp_sender_report {
 	uint32_t ssrc;
 	struct switch_rtcp_sender_info sender_info;
 	struct switch_rtcp_report_block report_block;
 };
 
+/* rr */
 struct switch_rtcp_receiver_report {
 	uint32_t ssrc;
 	struct switch_rtcp_report_block report_block;
@@ -877,6 +880,7 @@ int icecmp(const char *them, switch_rtp_ice_t *ice)
 	return strcmp(them, ice->luser_ice);
 }
 
+/* 处理ice */
 static void handle_ice(switch_rtp_t *rtp_session, switch_rtp_ice_t *ice, void *data, switch_size_t len)
 {
 	switch_stun_packet_t *packet;
@@ -1588,6 +1592,7 @@ static void do_mos(switch_rtp_t *rtp_session, int force) {
 	}
 }
 
+/* 突发速率计算 */
 void burstr_calculate ( int loss[], int received, double *burstr, double *lossr )
 {
 	int lost = 0;
@@ -1622,6 +1627,7 @@ static void reset_jitter_seq(switch_rtp_t *rtp_session)
 	rtp_session->stats.inbound.last_flaw = 0;
 }
 
+/* 检查网络抖动 */
 static void check_jitter(switch_rtp_t *rtp_session)
 {
 	switch_time_t current_time;
@@ -1673,12 +1679,16 @@ static void check_jitter(switch_rtp_t *rtp_session)
 	
 	rtp_session->stats.inbound.last_processed_seq = seq;
 
-	/* Burst and Packet Loss */
+	/* Burst and Packet Loss 突发流量与丢包 */
 
 	if (current_time > rtp_session->next_stat_check_time) {
 		rtp_session->next_stat_check_time = current_time + 5000;
+
+        /* 突发速率计算 */
 		burstr_calculate(rtp_session->stats.inbound.loss, rtp_session->stats.inbound.recved,
 						 &(rtp_session->stats.inbound.burstrate), &(rtp_session->stats.inbound.lossrate));
+
+        
 		do_mos(rtp_session, SWITCH_TRUE);
 	} else {
 		do_mos(rtp_session, SWITCH_FALSE);
@@ -1758,15 +1768,18 @@ static void check_jitter(switch_rtp_t *rtp_session)
 	}
 }
 
+/* 生成SR相对于RR独有的报告内容 */
 static void rtcp_generate_sender_info(switch_rtp_t *rtp_session, struct switch_rtcp_sender_info *sr){
 	switch_core_session_t *session = switch_core_memory_pool_get_data(rtp_session->pool, "__session");
 	switch_time_t now;
 	uint32_t sec, ntp_sec, ntp_usec;
 	switch_time_exp_t now_hr;
+
+    /* 生成当前的NTP信息 */
 	now = switch_time_now();
-	sec = (uint32_t)(now/1000000);        /* convert to seconds     */
-	ntp_sec = sec+NTP_TIME_OFFSET;  /* convert to NTP seconds */
-	sr->ntp_msw = htonl(ntp_sec);   /* store result in "most significant word" */
+	sec = (uint32_t)(now/1000000);              /* convert to seconds     */
+	ntp_sec = sec+NTP_TIME_OFFSET;              /* convert to NTP seconds */
+	sr->ntp_msw = htonl(ntp_sec);               /* store result in "most significant word" */
 	ntp_usec = (uint32_t)(now - (sec*1000000)); /* remove seconds to keep only the microseconds */
 	sr->ntp_lsw = htonl((u_long)(ntp_usec*(double)(((uint64_t)1)<<32)*1.0e-6)); /* convert microseconds to fraction of 32bits and store result in "least significatn word" */
 
@@ -1783,6 +1796,7 @@ static void rtcp_generate_sender_info(switch_rtp_t *rtp_session, struct switch_r
 }
 
 //#define DEBUG_RTCP
+/* 生成SR和RR共有的报告 */
 static void rtcp_generate_report_block(switch_rtp_t *rtp_session, struct switch_rtcp_report_block *rtcp_report_block){
 #ifdef DEBUG_RTCP
 	switch_core_session_t *session = switch_core_memory_pool_get_data(rtp_session->pool, "__session");
@@ -2000,7 +2014,17 @@ static int using_ice(switch_rtp_t *rtp_session)
 	return 0;
 }
 
-#define MAX_NACK 10
+#define MAX_NACK 10 /* rtcp包中最多聚合的nack个数 */
+
+/**
+ * check_rtcp_and_ice - 发送rtcp报文，及处理ice 
+ * 
+ * @rtp_session: rtp会话管理结构
+ *
+ * 触发条件：在没读到rtp报文的间隙，触发check_rtcp_and_ice()
+ *
+ * 返回值: 初始化成功 返回成功代码，失败 返回非零的错误码
+ */
 static int check_rtcp_and_ice(switch_rtp_t *rtp_session)
 {
 	int ret = 0;
@@ -3181,6 +3205,7 @@ static void free_dtls(switch_dtls_t **dtlsp)
 	}
 }
 
+/* 处理dtls */
 static int do_dtls(switch_rtp_t *rtp_session, switch_dtls_t *dtls)
 {
 	int r = 0, ret = 0, len;
@@ -5199,6 +5224,19 @@ static int get_recv_payload(switch_rtp_t *rtp_session)
 
 #define return_cng_frame() do_cng = 1; goto timer_check
 
+/**
+ * read_rtp_packet - 读取一个rtp包及相关业务
+ * 
+ * @rtp_session: rtp会话管理结构 -- input
+ * @bytes:包大小的指针(*byte为输出值)    -- input
+ * @flags:
+ * @poll_status:
+ * @return_jb_packet:
+ *
+ * 从socket中读包、检查网络抖动、处理ice、处理dtls、处理srtp、处理udptl、进行抗网络抖动的存包、取包
+ *
+ * 返回值: 初始化成功 返回成功代码，失败 返回非零的错误码
+ */
 static switch_status_t read_rtp_packet(switch_rtp_t *rtp_session, switch_size_t *bytes, switch_frame_flag_t *flags, 
 									   switch_status_t poll_status, switch_bool_t return_jb_packet)
 {
@@ -5214,6 +5252,8 @@ static switch_status_t read_rtp_packet(switch_rtp_t *rtp_session, switch_size_t 
 	switch_assert(bytes);
  more:
 
+    /* tries>1是，针对go to more的情况，进入read_rtp_packet()尝试读包循环，最多尝试读包20，避免陷入死循环 */
+    /* 在乱序、丢包环境中，容易出现 */
 	tries++;
 
 	if (tries > 20) {
@@ -5237,7 +5277,8 @@ static switch_status_t read_rtp_packet(switch_rtp_t *rtp_session, switch_size_t 
 				to = rtp_session->timer.interval * 1000;
 			}
 		}
-		
+
+        /* 判断fd是否可读 */
 		poll_status = switch_poll(rtp_session->read_pollfd, 1, &fdr, to);
 		
 		if (rtp_session->flags[SWITCH_RTP_FLAG_USE_TIMER] && rtp_session->timer.interval) {
@@ -5264,12 +5305,13 @@ static switch_status_t read_rtp_packet(switch_rtp_t *rtp_session, switch_size_t 
 	memset(&rtp_session->last_rtp_hdr, 0, sizeof(rtp_session->last_rtp_hdr));
 
 	if (poll_status == SWITCH_STATUS_SUCCESS) {
+        /* 收包 */
 		status = switch_socket_recvfrom(rtp_session->from_addr, rtp_session->sock_input, 0, (void *) &rtp_session->recv_msg, bytes);
 	} else {
 		*bytes = 0;
 	}
 
-	if (*bytes) {
+	if (*bytes) { /* 报文大小 */
 		b = (unsigned char *) &rtp_session->recv_msg;
 		
 		/* version 2 probably rtp, zrtp cookie present means zrtp */
@@ -5283,13 +5325,13 @@ static switch_status_t read_rtp_packet(switch_rtp_t *rtp_session, switch_size_t 
 			rtp_session->has_ice = 0;
 			rtp_session->has_rtp = 0;
 			rtp_session->has_rtcp = 0;
-		} else if (*b == 0 || *b == 1) {
+		} else if (*b == 0 || *b == 1) {                                /* 判断是否为ice报文 */
 			rtp_session->has_ice = 1;
 			rtp_session->has_rtp = 0;
 			rtp_session->has_rtcp = 0;
 		} else {
 			if (rtp_session->flags[SWITCH_RTP_FLAG_RTCP_MUX]) {
-				switch(rtp_session->recv_msg.header.pt) {
+				switch(rtp_session->recv_msg.header.pt) {               /* 判断rtcp报文的类型 */
 				case 64:        //  192 Full INTRA-frame request.
 				case 72:        //  200 Sender report.
 				case 73:        //  201 Receiver report.
@@ -5336,6 +5378,8 @@ static switch_status_t read_rtp_packet(switch_rtp_t *rtp_session, switch_size_t 
 	if (!rtp_session->vb && (!rtp_session->jb || rtp_session->pause_jb || !jb_valid(rtp_session))) {
 		if (*bytes > rtp_header_len && (rtp_session->has_rtp && check_recv_payload(rtp_session))) {
 			xcheck_jitter = *bytes;
+
+            /* 检查网络抖动 */
 			check_jitter(rtp_session);
 		}
 	}
@@ -5359,7 +5403,7 @@ static switch_status_t read_rtp_packet(switch_rtp_t *rtp_session, switch_size_t 
 		//	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(rtp_session->session), SWITCH_LOG_WARNING, "WTF BYTES %ld b=%d\n", *bytes, *b);
 		//}
 
-		
+		/* 处理ice */
 		if (rtp_session->has_ice) {
 			if (rtp_session->ice.ice_user) {
 				handle_ice(rtp_session, &rtp_session->ice, (void *) &rtp_session->recv_msg, *bytes);
@@ -5369,6 +5413,7 @@ static switch_status_t read_rtp_packet(switch_rtp_t *rtp_session, switch_size_t 
 		}
 	}
 
+    /* 处理dtls */
 	if (rtp_session->dtls) {
 		
 		if (rtp_session->rtcp_dtls && rtp_session->rtcp_dtls != rtp_session->dtls) {
@@ -5385,6 +5430,7 @@ static switch_status_t read_rtp_packet(switch_rtp_t *rtp_session, switch_size_t 
 		}
 	}
 
+    /* 处理srtp */
 	if (status == SWITCH_STATUS_SUCCESS && *bytes) { 
 		if (rtp_session->flags[SWITCH_RTP_FLAG_RTCP_MUX]) { 
 			*flags &= ~SFF_RTCP;
@@ -5445,6 +5491,7 @@ static switch_status_t read_rtp_packet(switch_rtp_t *rtp_session, switch_size_t 
 
 	}
 
+    /* 模拟随机丢包 */
 #ifdef RTP_READ_PLOSS
 	{
 		int r = (rand() % 10000) + 1;
@@ -5715,6 +5762,7 @@ static switch_status_t read_rtp_packet(switch_rtp_t *rtp_session, switch_size_t 
 		}
 	}
 
+    /* ===================================================存包=========================================================*/
 	if (rtp_session->has_rtp && *bytes) {
 		uint32_t read_ssrc = ntohl(rtp_session->last_rtp_hdr.ssrc);
 
@@ -5722,10 +5770,11 @@ static switch_status_t read_rtp_packet(switch_rtp_t *rtp_session, switch_size_t 
 			return SWITCH_STATUS_SUCCESS;
 		}
 
+        /* 视频报文存包 */
 		if (rtp_session->vb && jb_valid(rtp_session)) {
 			status = switch_jb_put_packet(rtp_session->vb, (switch_rtp_packet_t *) &rtp_session->recv_msg, *bytes);			
 
-			if (status == SWITCH_STATUS_TOO_LATE) {
+			if (status == SWITCH_STATUS_TOO_LATE) {/* 这里不会返回这个状态 */
 				goto more;
 			}
 			
@@ -5737,6 +5786,7 @@ static switch_status_t read_rtp_packet(switch_rtp_t *rtp_session, switch_size_t 
 			}
 		}
 
+        /* 音频报文存包 */
 		if (rtp_session->jb && !rtp_session->pause_jb && jb_valid(rtp_session)) {
 
 			if (rtp_session->last_jb_read_ssrc && rtp_session->last_jb_read_ssrc != read_ssrc) {
@@ -5772,8 +5822,10 @@ static switch_status_t read_rtp_packet(switch_rtp_t *rtp_session, switch_size_t 
 		}
 	}
 
+    /* ================================================取包======================================================================*/
 	if (!*bytes || rtp_session->has_rtp) {
-		
+
+        /* 音频取包 */
 		if (rtp_session->jb && !rtp_session->pause_jb && jb_valid(rtp_session)) {
 			switch_status_t jstatus = switch_jb_get_packet(rtp_session->jb, (switch_rtp_packet_t *) &rtp_session->recv_msg, bytes);
 
@@ -5816,7 +5868,8 @@ static switch_status_t read_rtp_packet(switch_rtp_t *rtp_session, switch_size_t 
 				break;
 			}
 		}
-		
+
+        /* 视频取包 */
 		if (rtp_session->vb && jb_valid(rtp_session)) {
 			switch_status_t vstatus = switch_jb_get_packet(rtp_session->vb, (switch_rtp_packet_t *) &rtp_session->recv_msg, bytes);
 			status = vstatus;
@@ -5933,7 +5986,10 @@ static switch_status_t process_rtcp_report(switch_rtp_t *rtp_session, rtcp_msg_t
 						  rtp_type(rtp_session), msg->header.type, extp->header.fmt);
 		
 		if (msg->header.type == _RTCP_PT_PSFB && (extp->header.fmt == _RTCP_PSFB_FIR || extp->header.fmt == _RTCP_PSFB_PLI)) {
+            /* 生成关键帧 */
 			switch_core_media_gen_key_frame(rtp_session->session);
+
+            /* 重置vbw */
 			if (rtp_session->vbw) {
 				switch_jb_reset(rtp_session->vbw);
 			}
@@ -6237,6 +6293,7 @@ static switch_status_t process_rtcp_packet(switch_rtp_t *rtp_session, switch_siz
 	return status;
 }
 
+/* 读一个rtcp包 */
 static switch_status_t read_rtcp_packet(switch_rtp_t *rtp_session, switch_size_t *bytes, switch_frame_flag_t *flags)
 {
 	switch_status_t status = SWITCH_STATUS_FALSE;
@@ -6374,12 +6431,26 @@ static switch_status_t read_rtcp_packet(switch_rtp_t *rtp_session, switch_size_t
 	}
 	
 	if (*bytes) {
+        /* 处理rtcp报文 */
 		return process_rtcp_packet(rtp_session, bytes);
 	}
 
 	return status;
 }
 
+/**
+ * rtp_common_read - 
+ * 
+ * @rtp_session: rtp会话管理结构 -- input
+ * @payload_type:
+ * @pmapP:
+ * @flags:
+ * @io_flags:
+ *
+ * 认为该函数是rtp不同类型的业务分发器，分类为读取音频rtp报文、读取视频的rtp报文、读取音视频的rtcp报文
+ *
+ * 返回值: 初始化成功 返回成功代码，失败 返回非零的错误码
+ */
 static int rtp_common_read(switch_rtp_t *rtp_session, switch_payload_t *payload_type, 
 						   payload_map_t **pmapP, switch_frame_flag_t *flags, switch_io_flag_t io_flags)
 {
@@ -6424,14 +6495,17 @@ static int rtp_common_read(switch_rtp_t *rtp_session, switch_payload_t *payload_
 
 		bytes = 0;
 
+        /* ===================================== 读取音频rtp报文 =============================================================*/
 		if (rtp_session->flags[SWITCH_RTP_FLAG_USE_TIMER] &&
 			!rtp_session->flags[SWITCH_RTP_FLAG_PROXY_MEDIA] && 
 			!rtp_session->flags[SWITCH_RTP_FLAG_VIDEO] && 
 			!rtp_session->flags[SWITCH_RTP_FLAG_UDPTL] &&
 			rtp_session->read_pollfd) {
-			
+
+            /* 读音频的rtp报文 */
 			if (rtp_session->jb && !rtp_session->pause_jb && jb_valid(rtp_session)) {
 				while (switch_poll(rtp_session->read_pollfd, 1, &fdr, 0) == SWITCH_STATUS_SUCCESS) {
+                    /* 读一个rtp包 */
 					status = read_rtp_packet(rtp_session, &bytes, flags, SWITCH_STATUS_SUCCESS, SWITCH_FALSE);
 
 					if (status == SWITCH_STATUS_GENERR) {
@@ -6455,11 +6529,13 @@ static int rtp_common_read(switch_rtp_t *rtp_session, switch_payload_t *payload_
 			} else if ((rtp_session->flags[SWITCH_RTP_FLAG_AUTOFLUSH] || rtp_session->flags[SWITCH_RTP_FLAG_STICKY_FLUSH])) {
 				
 				if (switch_poll(rtp_session->read_pollfd, 1, &fdr, 0) == SWITCH_STATUS_SUCCESS) {
+                    /* 读一个rtp包 */
 					status = read_rtp_packet(rtp_session, &bytes, flags, SWITCH_STATUS_SUCCESS, SWITCH_FALSE);
 					if (status == SWITCH_STATUS_GENERR) {
 						ret = -1;
 						goto end;
 					}
+                    
 					if ((*flags & SFF_RTCP)) {
 						*flags &= ~SFF_RTCP;
 						has_rtcp = 1;
@@ -6542,6 +6618,7 @@ static int rtp_common_read(switch_rtp_t *rtp_session, switch_payload_t *payload_
 
 	recvfrom:
 
+        /* ===================================== 读取视频rtp报文 =============================================================*/
 		if (!read_pretriggered) {
 			bytes = 0;
 		}
@@ -6555,6 +6632,7 @@ static int rtp_common_read(switch_rtp_t *rtp_session, switch_payload_t *payload_
 		if (!rtp_session->flags[SWITCH_RTP_FLAG_USE_TIMER] && rtp_session->read_pollfd) {
 			int pt = poll_sec * 1000000;
 
+            /* rfc2833处理 */
 			do_2833(rtp_session);
 
 			if (rtp_session->dtmf_data.out_digit_dur > 0 || rtp_session->dtmf_data.in_digit_sanity || rtp_session->sending_dtmf || 
@@ -6575,8 +6653,9 @@ static int rtp_common_read(switch_rtp_t *rtp_session, switch_payload_t *payload_
 			if ((io_flags & SWITCH_IO_FLAG_NOBLOCK)) {
 				pt = 0;
 			}
-			
-			poll_status = switch_poll(rtp_session->read_pollfd, 1, &fdr, pt);
+
+            /* 这里如果pt设置20ms，可能产生阻塞 */
+            poll_status = switch_poll(rtp_session->read_pollfd, 1, &fdr, pt);
 
 
 			//if (rtp_session->flags[SWITCH_RTP_FLAG_VIDEO]) {
@@ -6677,12 +6756,10 @@ static int rtp_common_read(switch_rtp_t *rtp_session, switch_payload_t *payload_
 				}
 			}
 
-
 			if (check_rtcp_and_ice(rtp_session) == -1) {
 				ret = -1;
 				goto end;
 			}
-			
 			
 			if ((!(io_flags & SWITCH_IO_FLAG_NOBLOCK)) && 
 				(rtp_session->dtmf_data.out_digit_dur == 0) && !rtp_session->flags[SWITCH_RTP_FLAG_ENABLE_RTCP]) {
@@ -6692,12 +6769,13 @@ static int rtp_common_read(switch_rtp_t *rtp_session, switch_payload_t *payload_
 		
 	rtcp:
 
+        /* ===================================== 读取音视频rtcp报文 =============================================================*/
 		if (rtp_session->flags[SWITCH_RTP_FLAG_ENABLE_RTCP]) {
 			rtcp_poll_status = SWITCH_STATUS_FALSE;
 			
 			if (rtp_session->flags[SWITCH_RTP_FLAG_RTCP_MUX] && has_rtcp) {
 				if (rtp_session->rtcp_recv_msg_p->header.version == 2) { //rtcp muxed
-					rtp_session->rtcp_from_addr = rtp_session->from_addr;
+					rtp_session->rtcp_from_addr = rtp_session->from_addr;           /* rtcp端口复用 */
 					rtcp_status = rtcp_poll_status = SWITCH_STATUS_SUCCESS;
 					rtcp_bytes = bytes;
 				}
@@ -6784,6 +6862,7 @@ static int rtp_common_read(switch_rtp_t *rtp_session, switch_payload_t *payload_
 					}
 
 					if (rtp_session->flags[SWITCH_RTP_FLAG_RTCP_MUX]) {
+                        /* 处理rtcp报文 */
 						process_rtcp_packet(rtp_session, &rtcp_bytes);
 						ret = 1;
 					
@@ -7825,7 +7904,8 @@ static int rtp_common_write(switch_rtp_t *rtp_session,
 							  send_msg->header.pt, ntohl(send_msg->header.ts), ntohs(send_msg->header.seq), send_msg->header.m);
 
 		}
-		
+
+        /* ==========================发送报文前，将报文拷贝到vbw中=================================== */
 		if (rtp_session->flags[SWITCH_RTP_FLAG_NACK]) {
 			if (!rtp_session->vbw) {
 				switch_jb_create(&rtp_session->vbw, SJB_VIDEO, 30, 30, rtp_session->pool);
@@ -7859,6 +7939,7 @@ static int rtp_common_write(switch_rtp_t *rtp_session,
 		//
 		//	//switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "SEND %u\n", ntohs(send_msg->header.seq));
 		//}
+		/* ===========================================发送报文========================================= */
 		if (switch_socket_sendto(rtp_session->sock_output, rtp_session->remote_addr, 0, (void *) send_msg, &bytes) != SWITCH_STATUS_SUCCESS) {
 			rtp_session->seq--;
 			ret = -1;
