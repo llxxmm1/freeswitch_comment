@@ -73,8 +73,8 @@ typedef struct {
 	int id;
 	int interval;
 	int tick;
-	int samplecount;
-	int samples;
+	int samplecount;    /* 时间戳增量 */
+	int samples;        /* 采样率 */
 	int diff;
 	void *private_info;
 } switch_timer_t;

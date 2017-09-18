@@ -1590,7 +1590,6 @@ SWITCH_DECLARE(void) switch_core_media_set_stats(switch_core_session_t *session)
  *
  * ·µ»ØÖµ: ÎÞ
  */
-
 SWITCH_DECLARE(void) switch_media_handle_destroy(switch_core_session_t *session)
 {
 	switch_media_handle_t *smh;

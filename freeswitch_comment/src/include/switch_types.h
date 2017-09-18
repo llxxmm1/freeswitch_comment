@@ -672,21 +672,54 @@ typedef struct {
 	uint32_t last_rpt_ts;         /* RTP timestamp at which the last report was generated and sent */
 	uint32_t ssrc;                /* identifier of the source */
 	uint32_t csrc;                /* contributing source 0-15 32bit each */
-	uint32_t last_pkt_tsdiff;     /* Jitter calculation, timestamp difference between the two last received packet */
-	double   inter_jitter;        /* Jitter calculation, Interarrival jitter */
-	uint32_t last_rpt_ext_seq;    /* Packet loss calculation, extended sequence number at the begining of this RTCP report interval */
+	uint32_t last_pkt_tsdiff;     /**
+	                               * Jitter calculation, timestamp difference between the two last received packet 
+	                               * 抖动计算：最新收到的两个报文之间的时间戳差值
+	                               */
+	double   inter_jitter;        /**
+	                               * Jitter calculation, Interarrival jitter 
+	                               * 抖动计算：间隔抖动 
+	                               */
+	uint32_t last_rpt_ext_seq;    /** 
+	                               * Packet loss calculation, extended sequence number at the begining of this RTCP report interval 
+                                   * 丢包率计算：每次向对端报告时，第一次记录的收到的rtp的seq
+                                   */
 	uint16_t last_rpt_cycle;      /* Packet loss calculation, sequence number cycle at the begining of the current RTCP report interval */
-	uint16_t period_pkt_count;    /* Packet loss calculation, packet count received during this RTCP report interval */
-	uint16_t pkt_count;           /* Packet loss calculation, packet count received during this session */
-	uint16_t sent_pkt_count;
-	uint32_t rtcp_rtp_count;      /* RTCP report generated count */
-	uint32_t high_ext_seq_recv;   /* Packet loss calculation, highest extended sequence number received and processed for stats */
+	uint16_t period_pkt_count;    /**
+	                               * 每次向对端进行RTCP报告（或者说发送rtcp）时，就会重置该字段为0；
+	                               * Packet loss calculation, packet count received during this RTCP report interval 
+	                               * 一个rtcp报告的周期内，每收到一个报文，seq增加1；
+	                               */
+	uint16_t pkt_count;           /** 
+	                               * Packet loss calculation, packet count received during this session 
+	                               * 丢包率计算：会话期间收到的包个数
+	                               */
+	uint16_t sent_pkt_count;      /* 发送的rtp报文个数（注意65535溢出后，从0开始计数，即只能用于周期计算）*/
+	uint32_t rtcp_rtp_count;      /** 
+	                               * RTCP report generated count 
+	                               * 生成rtcp报告的个数
+	                               */
+	uint32_t high_ext_seq_recv;   /** 
+	                               * Packet loss calculation, highest extended sequence number received and processed for stats 
+	                               * 丢包率计算：收到的包的seq,注意这里是32位无符整型，高16位标记的是第几次0--65535循环，因此称为扩展型seq
+	                               */
 	uint16_t cycle;               /* Packet loss calculation, sequence number cycle of the current RTCP report interval */
 	uint32_t bad_seq;             /* Bad SEQ found, used to detect reset on the other side */
-	uint16_t base_seq;            /* Packet loss calculation, first sequence number received */
-	uint32_t cum_lost;            /* Packet loss calculation, cumulative number of packet lost */ 
-	uint32_t last_recv_lsr_local; /* RTT calculation, When receiving an SR we save our local timestamp in fraction of 65536 seconds */
-	uint32_t last_recv_lsr_peer;  /* RTT calculation, When receiving an SR we extract the middle 32bits of the remote NTP timestamp to include it in the next SR LSR */
+	uint16_t base_seq;            /* Packet loss calculation, first sequence number received 
+                                   * 第一次收到rtp报文的seq
+                                   */
+	uint32_t cum_lost;            /**
+	                               * Packet loss calculation, cumulative number of packet lost 
+	                               * 丢包累加情况
+	                               */ 
+	uint32_t last_recv_lsr_local; /**
+	                               * RTT calculation, When receiving an SR we save our local timestamp in fraction of 65536 seconds
+	                               * 最近收到SR时，保存到本地的对端时间戳
+	                               */
+	uint32_t last_recv_lsr_peer;  /**
+	                               * RTT calculation, When receiving an SR we extract the middle 32bits of the remote NTP timestamp to include it in the next SR LSR 
+	                               * 最近收到SR时，保存的对端发送时时间戳
+	                               */
 	uint32_t init;
 } switch_rtcp_numbers_t;
 

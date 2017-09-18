@@ -49,7 +49,10 @@ typedef struct switch_jb_node_s {
 	struct switch_jb_s *parent;                 /* jb索引 */
 	switch_rtp_packet_t packet;                 /* 缓存一个rtp报文 */
 	uint32_t len;                               /* packet大小 */
-	uint8_t visible;                            /* 是否可见，用于重复利用已经申请的空间。不可见表示可利用。 */
+	uint8_t visible;                            /**
+	                                             * 是否可见，用于重复利用已经申请的空间。
+	                                             * 1，表示可见表示已利用;0，表示不可见表示可利用。
+	                                             */
 	uint8_t bad_hits;                           /* 该参数暂时未用 */
 	struct switch_jb_node_s *prev;              /* 链表上个节点索引 */
 	struct switch_jb_node_s *next;              /* 链表下个节点索引 */
@@ -315,7 +318,7 @@ static inline void hide_node(switch_jb_node_t *node, switch_bool_t pop)
  * 
  * @jb: jb指针
  *
- * 排序基于归并排序，排序的规则是可利用节点在前，seq大的在前
+ * 排序基于归并排序，排序的规则是可利用节点在前，seq小的在前
  *
  * 返回值: 无
  */
@@ -431,7 +434,7 @@ static inline uint32_t jb_find_lowest_ts(switch_jb_t *jb)
 }
 
 /**
- * thin_frames - "瘦帧"，随机丢包，使jb的结点链表变得稀疏
+ * thin_frames - "瘦帧"，随机丢包，使jb的结点链表变得稀疏，优先丢弃seq小的、早的报文
  * 
  * @jbp: jb指针
  * @freq: 链表随机丢包的间隔
